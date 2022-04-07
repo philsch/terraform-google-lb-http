@@ -94,7 +94,7 @@ resource "google_compute_target_https_proxy" "default" {
   name    = "${var.name}-https-proxy"
   url_map = local.url_map
 
-  ssl_certificates = compact(concat(var.ssl_certificates, google_compute_ssl_certificate.default.*.self_link, google_compute_managed_ssl_certificate.default.*.self_link, ), )
+  ssl_certificates = compact(concat(var.ssl_certificates, google_compute_ssl_certificate.default.*.self_link, [for c in google_compute_managed_ssl_certificate.default: c.self_link ], ), )
   ssl_policy       = var.ssl_policy
   quic_override    = var.quic ? "ENABLE" : null
 }
@@ -124,15 +124,16 @@ resource "random_id" "certificate" {
 resource "google_compute_managed_ssl_certificate" "default" {
   provider = google-beta
   project  = var.project
-  count    = var.ssl && length(var.managed_ssl_certificate_domains) > 0 && !var.use_ssl_certificates ? 1 : 0
-  name     = var.random_certificate_suffix == true ? random_id.certificate[0].hex : "${var.name}-cert"
+  for_each = toset(var.managed_ssl_certificate_domains)
+
+  name = var.random_certificate_suffix == true ? random_id.certificate[0].hex : "${var.name}-cert-${replace(each.key, ".", "-")}"
 
   lifecycle {
     create_before_destroy = true
   }
 
   managed {
-    domains = var.managed_ssl_certificate_domains
+    domains = [each.key]
   }
 }
 
